@@ -1,0 +1,8 @@
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+rustflags = [
+  "-C", "target-cpu=neoverse-n1",
+]
+
+[target.aarch64-unknown-linux-musl.openssl-sys]
+include_dirs = "/usr/include/aarch64-linux-gnu/openssl"

@@ -1,0 +1,42 @@
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "sls-uma-rs"
+
+[default.build.parameters]
+beta_features = true
+cached = true
+parallel = true
+debug = true
+region = "ap-northeast-1"
+config_file = "samconfig.toml"
+config_env = "default"
+profile = "defualt"
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+confirm_changeset = true
+resolve_s3 = true
+skip_pull_image = true
+use_container = false
+s3_prefix = "sls-uma-rs"
+region = "ap-northeast-1"
+image_repositories = []
+disable_rollback = true
+
+[default.package.parameters]
+resolve_s3 = true
+
+[default.sync.parameters]
+beta_features = true
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"

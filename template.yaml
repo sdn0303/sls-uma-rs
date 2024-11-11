@@ -1,0 +1,298 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless User Management Auth API Service
+
+Parameters:
+  Env:
+    Type: String
+    Default: dev
+    Description: "The stage name for the API Gateway"
+  RustLog:
+    Type: String
+    Default: info
+    Description: "The log level for the Rust application"
+  TagValue:
+    Type: String
+    Default: sls-uma-rs
+    Description: "The tag value for the service"
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    Runtime: provided.al2023
+    Tracing: Active
+    Environment:
+      Variables:
+        SERVICE_NAME: 'sls-uma-rs'
+        SERVICE_VERSION: '1'
+        SERVICE_ENVIRONMENT: !Ref Env
+        RUST_LOG: !Ref RustLog
+        RUST_BACKTRACE: '1'
+        AWS_REGION: !Ref 'AWS::Region'
+        COGNITO_SECRET_NAME: !Sub '${Env}/UserManagementAuthApi/CognitoEnv'
+        OTEL_EXPORTER_OTLP_ENDPOINT: |
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                http:
+          processors:
+            batch:
+          exporters:
+            logging:
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [logging]
+        OTEL_PROPAGATORS: xray,tracecontext,b3
+    Architectures:
+      - arm64
+    Layers:
+      - !Sub "arn:aws:lambda:${AWS::Region}:901920570463:layer:aws-otel-python38-ver-1-7-0:1"
+    Tags:
+      ENVIRONMENT: !Ref TagValue
+
+Resources:
+  UserApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: UserManagementAuthApi
+      StageName: !Ref Env
+      TracingEnabled: true
+      Tags:
+        ENVIRONMENT: !Ref TagValue
+      Auth:
+        DefaultAuthorizer: LambdaTokenAuthorizer
+        Authorizers:
+          LambdaTokenAuthorizer:
+            FunctionArn: !GetAtt TokenValidateFunction.Arn
+            IdentitySource: method.request.header.Authorization
+            FunctionPayloadType: TOKEN
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Users
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${TagValue}-UserPool'
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${TagValue}-UserPoolClient'
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - phone
+        - email
+        - openid
+        - aws.cognito.signin.user.admin
+      SupportedIdentityProviders:
+        - COGNITO
+
+  DynamoDbAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+            Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/Users"
+
+  CognitoAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminDeleteUser
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminInitiateAuth
+            Resource: !Ref UserPool
+
+  UserCreateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/users-create/bootstrap.zip
+      Policies:
+        - !Ref DynamoDbAccessPolicy
+        - !Ref CognitoAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        CreateOrganizationUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /organizations/{organizationId}/users
+            Method: post
+
+  UserGetFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/users-get/bootstrap.zip
+      Policies:
+        - !Ref DynamoDbAccessPolicy
+      Events:
+        GetUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /users/{userId}
+            Method: get
+
+  UserUpdateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/users-update/bootstrap.zip
+      Policies:
+        - !Ref DynamoDbAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        UpdateUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /organizations/{organizationId}/users/{userId}
+            Method: put
+
+  UserDeleteFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/users-delete/bootstrap.zip
+      Policies:
+        - !Ref DynamoDbAccessPolicy
+        - !Ref CognitoAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        DeleteUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /organizations/{organizationId}/users/{userId}
+            Method: delete
+
+  UserLoginFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/auth-login/bootstrap.zip
+      Policies:
+        - !Ref CognitoAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        AuthLogin:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /auth/login
+            Method: post
+
+  UserSignupFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/auth-signup/bootstrap.zip
+      Policies:
+        - !Ref CognitoAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        AuthSignup:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /users
+            Method: post
+
+  TokenRefreshFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/tokens-refresh/bootstrap.zip
+      Policies:
+        - !Ref CognitoAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        TokensRefresh:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /tokens/refresh
+            Method: post
+
+  TokenValidateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      Handler: bootstrap
+      CodeUri: ./target/lambda/tokens-validate/bootstrap.zip
+      Policies:
+        - !Ref CognitoAccessPolicy
+        - AWSXrayWriteOnlyAccess
+      Events:
+        TokensValidate:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /tokens/validate
+            Method: get
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint URL for the specified stage"
+    Value: !Sub "https://${UserApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}/"

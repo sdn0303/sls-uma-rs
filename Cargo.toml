@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+  "lambda/auth/login",
+  "lambda/auth/signup",
+  "lambda/tokens/refresh",
+  "lambda/tokens/validate",
+  "lambda/users/create",
+  "lambda/users/delete",
+  "lambda/users/get",
+  "lambda/users/update",
+  "shared"
+]
+
+[workspace.dependencies]
+shared = { path = "shared" }
+
+aws-config = { version = "1.1.1", features = ["behavior-version-latest"] }
+aws-sdk-cognitoidentityprovider = "1.51.0"
+aws-sdk-dynamodb = "1.37.0"
+aws-sdk-secretsmanager = "1.40.0"
+aws_lambda_events = { version = "0.15.1", default-features = false, features = ["apigw"] }
+lambda_runtime = "0.13.0"
+
+async-trait = { version = "0.1.81" }
+anyhow = "1.0.92"
+chrono = { version = "0.4.19", features = ["serde"] }
+serde = "1.0.136"
+serde_json = "1.0.108"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3.31"
+opentelemetry = "0.26.0"
+opentelemetry-aws = "0.14.0"
+opentelemetry-otlp = "0.26.0"
+opentelemetry_sdk = { version = "0.26.0", features = ["rt-tokio"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = "0.3.18"
+tracing-opentelemetry = "0.27.0"
+uuid = { version = "1.9.1", features = ["serde", "v4"] }
+reqwest = { version = "0.12.9", features = ["blocking", "json", "rustls-tls"], default-features = false }

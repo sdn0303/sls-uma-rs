@@ -1,0 +1,5 @@
+/target
+.aws-sam
+.idea
+.vscode
+.DS_Store

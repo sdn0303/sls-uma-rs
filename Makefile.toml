@@ -1,0 +1,60 @@
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG = true
+SAM_CLI_BETA_RUST_CARGO_LAMBDA = 1
+RUST_BACKTRACE = 1
+OPENSSL_STATIC = 1
+
+[tasks.fmt]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt", "--", "--emit=files"]
+
+[tasks.lint]
+install_crate = "clippy"
+command = "cargo"
+args = ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
+
+[tasks.test]
+command = "cargo"
+args = ["test"]
+dependencies = [
+  "lint",
+  "fmt",
+]
+
+[tasks.build-all]
+description = "Build all projects"
+run_task = { name = ["build-auth-login", "build-auth-signup", "build-tokens-refresh", "build-tokens-validate", "build-users-create", "build-users-delete", "build-users-get", "build-users-update"], parallel = true }
+
+[tasks.build-auth-login]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "auth-login"]
+
+[tasks.build-auth-signup]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "auth-signup"]
+
+[tasks.build-tokens-refresh]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "tokens-refresh"]
+
+[tasks.build-tokens-validate]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "tokens-validate"]
+
+[tasks.build-users-create]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-create"]
+
+[tasks.build-users-delete]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-delete"]
+
+[tasks.build-users-get]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-get"]
+
+[tasks.build-users-update]
+command = "cargo"
+args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-update"]
