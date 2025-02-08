@@ -24,14 +24,12 @@ lambda_runtime = "0.13.0"
 
 async-trait = { version = "0.1.81" }
 anyhow = "1.0.92"
-chrono = { version = "0.4.19", features = ["serde"] }
 serde = "1.0.136"
 serde_json = "1.0.108"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3.31"
 opentelemetry = "0.26.0"
 opentelemetry-aws = "0.14.0"
-opentelemetry-otlp = "0.26.0"
 opentelemetry_sdk = { version = "0.26.0", features = ["rt-tokio"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = "0.3.18"
