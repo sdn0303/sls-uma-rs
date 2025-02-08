@@ -1,6 +1,7 @@
 mod requests;
 
 use crate::requests::ListUsersResponse;
+
 use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
 use shared::repository::user_repository::{UserRepository, UserRepositoryImpl};
@@ -26,7 +27,7 @@ async fn get_user_handler(
 ) -> Result<ApiGatewayProxyResponse, Error> {
     let (user_id, _) =
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let repository = initialize_user_repository(region_string).await?;
     let user = repository.get_user_by_id(user_id.clone()).await?;
     Ok(apigw_response(
@@ -42,7 +43,7 @@ async fn get_users_handler(
 ) -> Result<ApiGatewayProxyResponse, Error> {
     let (_, organization_id) =
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let repository = initialize_user_repository(region_string).await?;
     let users = repository
         .get_users_by_organization_id(organization_id)

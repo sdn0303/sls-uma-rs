@@ -1,6 +1,7 @@
 pub mod requests;
 
 use crate::requests::{TokenValidateRequest, TokenValidateResponse};
+
 use shared::aws::cognito::token_authorizer::CognitoTokenAuthorizer;
 use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
@@ -49,7 +50,7 @@ fn parse_validate_token_request(body: Option<&str>) -> Result<TokenValidateReque
 async fn token_validate_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let client = initialize_cognito_token_authorizer_client(region_string.clone()).await?;
     let repository = initialize_user_repository(region_string).await?;
     let validate_token_request = parse_validate_token_request(event.payload.body.as_deref())?;

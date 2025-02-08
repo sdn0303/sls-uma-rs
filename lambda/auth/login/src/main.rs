@@ -1,6 +1,7 @@
 mod requests;
 
 use crate::requests::{LoginRequest, LoginResponse};
+
 use shared::aws::cognito::client::CognitoClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
 use shared::entity::secrets::Secrets;
@@ -12,7 +13,7 @@ use tracing::{debug, info, instrument};
 
 #[instrument(name = "lambda.auth.login.initialize_cognito_client")]
 async fn initialize_cognito_client() -> Result<CognitoClient, Error> {
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let secrets = Secrets::get_secrets(region_string.clone()).await?;
     let client = CognitoClient::new(
         region_string,

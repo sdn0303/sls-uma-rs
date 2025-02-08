@@ -1,6 +1,7 @@
 mod requests;
 
 use crate::requests::{UpdateUserRequest, UpdateUserResponse};
+
 use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
 use shared::repository::user_repository::{UserRepository, UserRepositoryImpl};
@@ -46,7 +47,7 @@ async fn update_user_handler(
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
 
     let update_user_request = parse_update_user_request(event.payload.body.as_deref())?;
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let repository = initialize_user_repository(region_string).await?;
 
     let mut user = repository.get_user_by_id(user_id.clone()).await?;

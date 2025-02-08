@@ -1,6 +1,7 @@
 mod requests;
 
 use crate::requests::{CreateUserRequest, CreateUserResponse};
+
 use shared::aws::cognito::client::CognitoClient;
 use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::request::LambdaEventRequestHandler;
@@ -91,7 +92,7 @@ async fn create_user_handler(
     let (user_id, _) =
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
 
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let client = initialize_cognito_client(region_string.clone()).await?;
     let repository = initialize_user_repository(region_string).await?;
 

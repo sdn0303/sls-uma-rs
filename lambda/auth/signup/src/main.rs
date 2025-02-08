@@ -1,6 +1,7 @@
 mod requests;
 
 use crate::requests::{SignupRequest, SignupResponse};
+
 use shared::aws::cognito::client::CognitoClient;
 use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
@@ -69,7 +70,7 @@ async fn signup_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
     let signup_request = parse_signup_request(event.payload.body.as_deref())?;
-    let region_string = get_env("AWS_REGION", "ap-northeast-1");
+    let region_string = get_env("REGION", "ap-northeast-1");
     let client = initialize_cognito_client(region_string.clone()).await?;
     let repository = initialize_user_repository(region_string).await?;
 
