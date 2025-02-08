@@ -3,7 +3,7 @@ use shared::entity::user::Role;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CreateUserRequest {
+pub(super) struct CreateUserRequest {
     pub user_name: String,
     pub email: String,
     pub organization_id: String,
@@ -12,7 +12,7 @@ pub struct CreateUserRequest {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CreateUserResponse {
+pub(super) struct CreateUserResponse {
     pub user_name: String,
     pub user_email: String,
     pub user_roles: Vec<Role>,
