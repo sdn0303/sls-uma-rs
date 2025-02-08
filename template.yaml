@@ -24,34 +24,15 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        SERVICE_NAME: 'sls-uma-rs'
+        SERVICE_NAME: !Ref TagValue
         SERVICE_VERSION: '1'
         SERVICE_ENVIRONMENT: !Ref Env
         RUST_LOG: !Ref RustLog
         RUST_BACKTRACE: '1'
-        AWS_REGION: !Ref 'AWS::Region'
+        REGION: !Ref 'AWS::Region'
         COGNITO_SECRET_NAME: !Sub '${Env}/UserManagementAuthApi/CognitoEnv'
-        OTEL_EXPORTER_OTLP_ENDPOINT: |
-          receivers:
-            otlp:
-              protocols:
-                grpc:
-                http:
-          processors:
-            batch:
-          exporters:
-            logging:
-          service:
-            pipelines:
-              traces:
-                receivers: [otlp]
-                processors: [batch]
-                exporters: [logging]
-        OTEL_PROPAGATORS: xray,tracecontext,b3
     Architectures:
       - arm64
-    Layers:
-      - !Sub "arn:aws:lambda:${AWS::Region}:901920570463:layer:aws-otel-python38-ver-1-7-0:1"
     Tags:
       ENVIRONMENT: !Ref TagValue
 
@@ -117,6 +98,8 @@ Resources:
         - aws.cognito.signin.user.admin
       SupportedIdentityProviders:
         - COGNITO
+      CallbackURLs:
+        - !Sub "https://${Env}.example.com/callback"
 
   DynamoDbAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -145,7 +128,8 @@ Resources:
               - cognito-idp:AdminDeleteUser
               - cognito-idp:AdminGetUser
               - cognito-idp:AdminInitiateAuth
-            Resource: !Ref UserPool
+            Resource:
+              - !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPool}"
 
   UserCreateFunction:
     Type: AWS::Serverless::Function
