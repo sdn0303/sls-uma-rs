@@ -106,8 +106,8 @@ sam deploy --profile { your profile }
 ## API Endpoints
 
 ```text
-POST   /users
-POST   /auth/login
+POST   /signup
+POST   /login
 POST   /tokens/refresh
 GET    /tokens/validate
 GET    /organizations/{organizationId}/users
