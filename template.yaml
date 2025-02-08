@@ -215,12 +215,14 @@ Resources:
         - !Ref CognitoAccessPolicy
         - AWSXrayWriteOnlyAccess
       Events:
-        AuthLogin:
+        Login:
           Type: Api
           Properties:
             RestApiId: !Ref UserApi
-            Path: /auth/login
+            Path: /login
             Method: post
+            Auth:
+              Authorizer: NONE
 
   UserSignupFunction:
     Type: AWS::Serverless::Function
@@ -233,12 +235,14 @@ Resources:
         - !Ref CognitoAccessPolicy
         - AWSXrayWriteOnlyAccess
       Events:
-        AuthSignup:
+        Signup:
           Type: Api
           Properties:
             RestApiId: !Ref UserApi
-            Path: /users
+            Path: /signup
             Method: post
+            Auth:
+              Authorizer: NONE
 
   TokenRefreshFunction:
     Type: AWS::Serverless::Function
