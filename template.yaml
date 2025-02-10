@@ -9,7 +9,7 @@ Parameters:
     Description: "The stage name for the API Gateway"
   RustLog:
     Type: String
-    Default: info
+    Default: debug
     Description: "The log level for the Rust application"
   TagValue:
     Type: String
