@@ -103,6 +103,17 @@ sam build --profile { your profile }
 sam deploy --profile { your profile }
 ```
 
+### AWS Secrets Manager Configuration
+
+Set the following items as secrets manually from the Cognito User Pool Client settings in the AWS Console:
+
+- COGNITO_USER_POOL_ID
+- COGNITO_CLIENT_ID
+- COGNITO_CLIENT_SECRET
+- COGNITO_JWKS_URL
+
+In addition, please create the secret with the name `{Env}/UserManagementAuthApi/CognitoEnv`.
+
 ## API Endpoints
 
 ```text
