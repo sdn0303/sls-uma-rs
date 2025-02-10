@@ -73,7 +73,7 @@ async fn handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
     debug!("handling lambda req: {:?}", event);
-    LambdaEventRequestHandler::handle_requests(event, "/auth/login", login_handler).await
+    LambdaEventRequestHandler::handle_requests(event, "/login", login_handler).await
 }
 
 #[tokio::main]
