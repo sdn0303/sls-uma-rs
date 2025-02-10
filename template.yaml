@@ -84,8 +84,11 @@ Resources:
     Properties:
       ClientName: !Sub '${TagValue}-UserPoolClient'
       UserPoolId: !Ref UserPool
-      GenerateSecret: false
+      GenerateSecret: true
       ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_CUSTOM_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       AllowedOAuthFlows:
@@ -160,11 +163,17 @@ Resources:
       Policies:
         - !Ref DynamoDbAccessPolicy
       Events:
+        GetUsers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref UserApi
+            Path: /organizations/{organizationId}/users
+            Method: get
         GetUser:
           Type: Api
           Properties:
             RestApiId: !Ref UserApi
-            Path: /users/{userId}
+            Path: /organizations/{organizationId}/users/{userId}
             Method: get
 
   UserUpdateFunction:
@@ -223,6 +232,7 @@ Resources:
             Method: post
             Auth:
               Authorizer: NONE
+              OverrideApiAuth: true
 
   UserSignupFunction:
     Type: AWS::Serverless::Function
@@ -243,6 +253,7 @@ Resources:
             Method: post
             Auth:
               Authorizer: NONE
+              OverrideApiAuth: true
 
   TokenRefreshFunction:
     Type: AWS::Serverless::Function
