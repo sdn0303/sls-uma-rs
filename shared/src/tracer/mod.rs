@@ -3,10 +3,9 @@ use crate::utils::env::get_env;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry::KeyValue;
 use opentelemetry_sdk::trace as sdktrace;
-use tracing_subscriber::{fmt, layer::SubscriberExt, Registry};
+use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Registry};
 
 pub fn init_tracing() {
-    // 環境変数からサービス情報を取得
     let service_name = get_env("SERVICE_NAME", "local");
     let service_version = get_env("SERVICE_VERSION", "local");
     let service_environment = get_env("SERVICE_ENVIRONMENT", "local");
@@ -29,7 +28,11 @@ pub fn init_tracing() {
         .build();
 
     let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-    let subscriber = Registry::default().with(telemetry_layer).with(fmt::layer());
+    let filter_layer = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let subscriber = Registry::default()
+        .with(filter_layer)
+        .with(telemetry_layer)
+        .with(fmt::layer());
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set tracing subscriber.");
 
     tracing::info!("Tracing initialized for AWS X‑Ray");
