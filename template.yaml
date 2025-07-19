@@ -31,6 +31,7 @@ Globals:
         RUST_BACKTRACE: '1'
         REGION: !Ref 'AWS::Region'
         COGNITO_SECRET_NAME: !Sub '${Env}/UserManagementAuthApi/CognitoEnv'
+        TABLE_NAME: Users
     Architectures:
       - arm64
     Tags:
@@ -50,11 +51,14 @@ Resources:
         Authorizers:
           LambdaTokenAuthorizer:
             FunctionArn: !GetAtt TokenValidateFunction.Arn
-            IdentitySource: method.request.header.Authorization
             FunctionPayloadType: TOKEN
+            IdentityValidationExpression: "^Bearer [-0-9a-zA-z.]*$"
+            AuthorizerResultTtlInSeconds: 300
 
   UsersTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: Users
       AttributeDefinitions:
@@ -67,6 +71,8 @@ Resources:
 
   UserPool:
     Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       UserPoolName: !Sub '${TagValue}-UserPool'
       AutoVerifiedAttributes:
@@ -131,6 +137,8 @@ Resources:
               - cognito-idp:AdminDeleteUser
               - cognito-idp:AdminGetUser
               - cognito-idp:AdminInitiateAuth
+              - cognito-idp:AdminSetUserPassword
+              - cognito-idp:AdminUpdateUserAttributes
             Resource:
               - !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPool}"
 
@@ -221,8 +229,15 @@ Resources:
       Handler: bootstrap
       CodeUri: ./target/lambda/auth-login/bootstrap.zip
       Policies:
+        - !Ref DynamoDbAccessPolicy
         - !Ref CognitoAccessPolicy
         - AWSXrayWriteOnlyAccess
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Env}/UserManagementAuthApi/CognitoEnv*'
       Events:
         Login:
           Type: Api
@@ -242,8 +257,15 @@ Resources:
       Handler: bootstrap
       CodeUri: ./target/lambda/auth-signup/bootstrap.zip
       Policies:
+        - !Ref DynamoDbAccessPolicy
         - !Ref CognitoAccessPolicy
         - AWSXrayWriteOnlyAccess
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Env}/UserManagementAuthApi/CognitoEnv*'
       Events:
         Signup:
           Type: Api
@@ -265,6 +287,12 @@ Resources:
       Policies:
         - !Ref CognitoAccessPolicy
         - AWSXrayWriteOnlyAccess
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Env}/UserManagementAuthApi/CognitoEnv*'
       Events:
         TokensRefresh:
           Type: Api
@@ -283,6 +311,12 @@ Resources:
       Policies:
         - !Ref CognitoAccessPolicy
         - AWSXrayWriteOnlyAccess
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Env}/UserManagementAuthApi/CognitoEnv*'
       Events:
         TokensValidate:
           Type: Api

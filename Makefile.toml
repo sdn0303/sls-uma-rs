@@ -18,43 +18,218 @@ args = ["clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
 [tasks.test]
 command = "cargo"
 args = ["test"]
-dependencies = [
-  "lint",
-  "fmt",
-]
+dependencies = ["lint", "fmt"]
 
 [tasks.build-all]
 description = "Build all projects"
-run_task = { name = ["build-auth-login", "build-auth-signup", "build-tokens-refresh", "build-tokens-validate", "build-users-create", "build-users-delete", "build-users-get", "build-users-update"], parallel = true }
+run_task = { name = [
+  "build-auth-login",
+  "build-auth-signup",
+  "build-tokens-refresh",
+  "build-tokens-validate",
+  "build-users-create",
+  "build-users-delete",
+  "build-users-get",
+  "build-users-update",
+], parallel = true }
 
 [tasks.build-auth-login]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "auth-login"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "auth-login",
+]
 
 [tasks.build-auth-signup]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "auth-signup"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "auth-signup",
+]
 
 [tasks.build-tokens-refresh]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "tokens-refresh"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "tokens-refresh",
+]
 
 [tasks.build-tokens-validate]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "tokens-validate"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "tokens-validate",
+]
 
 [tasks.build-users-create]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-create"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "users-create",
+]
 
 [tasks.build-users-delete]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-delete"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "users-delete",
+]
 
 [tasks.build-users-get]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-get"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "users-get",
+]
 
 [tasks.build-users-update]
 command = "cargo"
-args = ["lambda", "build", "--release", "--target", "aarch64-unknown-linux-musl", "--output-format", "zip", "--package", "users-update"]
+args = [
+  "lambda",
+  "build",
+  "--release",
+  "--target",
+  "aarch64-unknown-linux-musl",
+  "--output-format",
+  "zip",
+  "--package",
+  "users-update",
+]
+
+[tasks.strip-auth-login]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/auth-login",
+  "unzip -o -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-auth-login"]
+
+[tasks.strip-auth-signup]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/auth-signup",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-auth-signup"]
+
+[tasks.strip-tokens-refresh]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/tokens-refresh",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-tokens-refresh"]
+
+[tasks.strip-tokens-validate]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/tokens-validate",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-tokens-validate"]
+
+[tasks.strip-users-create]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/users-create",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-users-create"]
+
+[tasks.strip-users-delete]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/users-delete",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-users-delete"]
+
+[tasks.strip-users-get]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/users-get",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-users-get"]
+
+[tasks.strip-users-update]
+script = [
+  "cd ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/target/lambda/users-update",
+  "unzip -q bootstrap.zip",
+  "strip bootstrap",
+  "zip -q bootstrap.zip bootstrap",
+]
+dependencies = ["build-users-update"]
+
+[tasks.strip-all]
+description = "Strip debug symbols from all Lambda functions"
+run_task = { name = [
+  "strip-auth-login",
+  "strip-auth-signup",
+  "strip-tokens-refresh",
+  "strip-tokens-validate",
+  "strip-users-create",
+  "strip-users-delete",
+  "strip-users-get",
+  "strip-users-update",
+], parallel = false }
+
+[tasks.release]
+description = "Build all projects and strip debug symbols"
+dependencies = ["strip-all"]
