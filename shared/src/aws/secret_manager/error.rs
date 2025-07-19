@@ -1,17 +1,29 @@
-use aws_sdk_secretsmanager::{error::SdkError, operation::get_secret_value::GetSecretValueError};
+use aws_sdk_secretsmanager::{
+    error::{BuildError, SdkError},
+    operation::get_secret_value::GetSecretValueError,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum SecretManagerError {
     #[error("GetSecretValueError: {0}")]
-    GetSecretValueError(#[from] SdkError<GetSecretValueError>),
+    GetSecretValueError(#[from] Box<SdkError<GetSecretValueError>>),
 
-    #[error("Semaphore error: {0}")]
+    #[error("BuildError: {0}")]
+    BuildError(BuildError),
+
+    #[error("SemaphoreError: {0}")]
     SemaphoreError(String),
 
-    #[error("Missing secret string: {0}")]
-    MissingSecretString(String),
+    #[error("Not found")]
+    NotFound,
 
-    #[error("Other error: {0}")]
+    #[error("MissingAttribute: {0}")]
+    MissingAttribute(String),
+
+    #[error("InvalidAttribute: {0}")]
+    InvalidAttribute(String),
+
+    #[error("Other: {0}")]
     Other(String),
 }

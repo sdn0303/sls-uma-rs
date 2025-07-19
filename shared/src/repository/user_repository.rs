@@ -19,6 +19,16 @@ pub trait UserRepository {
         organization_id: String,
     ) -> Result<(), AnyhowError>;
     async fn update_user(&self, user: User) -> Result<User, AnyhowError>;
+
+    async fn find_organization_id_by_name(
+        &self,
+        organization_name: &str,
+    ) -> Result<Option<String>, AnyhowError>;
+    async fn organization_exists(&self, organization_name: &str) -> Result<bool, AnyhowError>;
+    async fn is_first_user_in_organization(
+        &self,
+        organization_name: &str,
+    ) -> Result<bool, AnyhowError>;
 }
 
 pub struct UserRepositoryImpl {
@@ -104,6 +114,8 @@ impl UserRepository for UserRepositoryImpl {
     }
 
     async fn create_user(&self, user: User) -> Result<User, AnyhowError> {
+        debug!("Creating user in DynamoDB: {:?}", user);
+
         let items = self
             .client
             .generate_attribute_values(&[
@@ -115,19 +127,24 @@ impl UserRepository for UserRepositoryImpl {
                 ("roles", &user.join_roles()),
             ])
             .await;
-        let output = self.client.put_item(&self.table_name, items).await?;
-        match output.attributes() {
-            Some(item) => {
-                debug!("dynamodb put item output: {:?}", item);
-                let user = User::from_item(item)?;
-                Ok(user)
-            }
-            None => {
-                let err_msg = "dynamodb put item failed";
-                error!(err_msg);
-                Err(anyhow!(err_msg))
-            }
-        }
+
+        debug!("Generated DynamoDB items: {:?}", items);
+
+        let _ = self
+            .client
+            .put_item(&self.table_name, items)
+            .await
+            .map_err(|e| {
+                error!("DynamoDB PutItem failed: {:?}", e);
+                anyhow!("DynamoDB PutItem failed: {:?}", e)
+            })?;
+
+        // PutItem operation doesn't return attributes on success
+        // If we reach here, the operation was successful
+        debug!("dynamodb put item successful for user: {}", user.id);
+
+        // Return the original user object since PutItem doesn't return the item
+        Ok(user)
     }
 
     async fn delete_user_by_id(
@@ -195,5 +212,71 @@ impl UserRepository for UserRepositoryImpl {
                 Err(anyhow!(err_msg))
             }
         }
+    }
+
+    async fn find_organization_id_by_name(
+        &self,
+        organization_name: &str,
+    ) -> Result<Option<String>, AnyhowError> {
+        let response = self.client.scan_table(&self.table_name).await?;
+
+        let organization_id = response
+            .items
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        item.get("organization_name")
+                            .and_then(|attr| attr.as_s().ok())
+                            .filter(|&org_name| org_name == organization_name)
+                            .and_then(|_| item.get("organization_id"))
+                            .and_then(|attr| attr.as_s().ok())
+                            .map(|s| s.to_string())
+                    })
+                    .next()
+            })
+            .flatten();
+
+        Ok(organization_id)
+    }
+
+    async fn organization_exists(&self, organization_name: &str) -> Result<bool, AnyhowError> {
+        let response = self.client.scan_table(&self.table_name).await?;
+
+        let exists = response
+            .items
+            .as_ref()
+            .map(|items| {
+                items.iter().any(|item| {
+                    item.get("organization_name")
+                        .and_then(|attr| attr.as_s().ok())
+                        .map_or(false, |org_name| org_name == organization_name)
+                })
+            })
+            .unwrap_or(false);
+
+        Ok(exists)
+    }
+
+    async fn is_first_user_in_organization(
+        &self,
+        organization_name: &str,
+    ) -> Result<bool, AnyhowError> {
+        let response = self.client.scan_table(&self.table_name).await?;
+
+        let has_existing_users = response
+            .items
+            .as_ref()
+            .map(|items| {
+                items.iter().any(|item| {
+                    item.get("organization_name")
+                        .and_then(|attr| attr.as_s().ok())
+                        .map_or(false, |org_name| org_name == organization_name)
+                })
+            })
+            .unwrap_or(false);
+
+        Ok(!has_existing_users)
     }
 }

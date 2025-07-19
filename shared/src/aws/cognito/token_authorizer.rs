@@ -16,6 +16,7 @@ pub struct Claims {
     pub exp: u64,
 }
 
+#[derive(Clone)]
 pub struct CognitoTokenAuthorizer {
     user_pool_id: String,
     jwks_url: String,

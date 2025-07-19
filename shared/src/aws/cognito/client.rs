@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use tracing::instrument;
 
+#[derive(Clone)]
 pub struct CognitoClient {
     client: Arc<Client>,
     user_pool_id: String,
@@ -133,17 +134,24 @@ impl CognitoClient {
 
     #[instrument(
         skip(self),
-        fields(user_pool_id = %self.user_pool_id, username = %username),
+        fields(user_pool_id = %self.user_pool_id, username = %username, email = %email),
         name = "aws.cognito.email_verified"
     )]
     pub async fn email_verified(
         &self,
         username: String,
+        email: String,
     ) -> Result<AdminUpdateUserAttributesOutput, CognitoError> {
-        let user_attributes = vec![AttributeType::builder()
-            .name("email_verified")
-            .value("true")
-            .build()?];
+        let user_attributes = vec![
+            AttributeType::builder()
+                .name("email")
+                .value(email)
+                .build()?,
+            AttributeType::builder()
+                .name("email_verified")
+                .value("true")
+                .build()?,
+        ];
 
         let result = self
             .client

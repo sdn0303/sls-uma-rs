@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
 
+#[derive(Clone)]
 pub struct DynamoDbClient {
     client: Arc<Client>,
 }

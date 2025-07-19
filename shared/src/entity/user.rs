@@ -71,7 +71,7 @@ impl std::fmt::Display for Role {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
     pub name: String,
@@ -142,6 +142,11 @@ impl User {
             .join(":")
     }
 
+    pub fn get_roles(&self) -> HashSet<Role> {
+        // Get 'roles' attribute and convert to HashSet<Role>
+        self.roles.clone()
+    }
+
     pub fn from_item(item: &HashMap<String, AttributeValue>) -> Result<User, Error> {
         let id = item
             .get("id")
@@ -175,7 +180,7 @@ impl User {
             )?
             .to_string();
 
-        // 'roles' 属性を取得し、HashSet<Role>に変換
+        // Get 'roles' attribute and convert to HashSet<Role>
         let roles_attr = item
             .get("roles")
             .and_then(|v| v.as_s().ok())

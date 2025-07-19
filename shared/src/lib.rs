@@ -1,5 +1,9 @@
 pub mod aws;
+pub mod cache_manager;
+pub mod client_manager;
+pub mod config;
 pub mod entity;
+pub mod errors;
 pub mod repository;
 pub mod tracer;
 pub mod utils;

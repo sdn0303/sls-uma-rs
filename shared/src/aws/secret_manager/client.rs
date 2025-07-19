@@ -34,7 +34,8 @@ impl SecretManagerClient {
             .get_secret_value()
             .secret_id(secret_name)
             .send()
-            .await?;
+            .await
+            .map_err(|e| SecretManagerError::GetSecretValueError(Box::new(e)))?;
 
         Ok(secret)
     }
@@ -58,10 +59,7 @@ impl SecretManagerClient {
 
         let secret_response = self.get_secret(key).await?;
         let secret = secret_response.secret_string.ok_or_else(|| {
-            SecretManagerError::MissingSecretString(format!(
-                "Missing secret string for key: {}",
-                key
-            ))
+            SecretManagerError::MissingAttribute(format!("Missing secret string for key: {}", key))
         })?;
 
         Ok((key.to_string(), secret))
