@@ -2,62 +2,48 @@ mod requests;
 
 use crate::requests::{CreateUserRequest, CreateUserResponse};
 
-use shared::aws::cognito::client::CognitoClient;
-use shared::aws::dynamodb::client::DynamoDbClient;
-use shared::aws::lambda_events::request::LambdaEventRequestHandler;
-use shared::aws::lambda_events::response::apigw_response;
-use shared::entity::secrets::Secrets;
+use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
+use shared::cache_manager::get_cache_manager;
+use shared::client_manager::{CognitoClientManager, DefaultClientManager, DynamoDbClientManager};
 use shared::entity::user::{Permissions, Role, User};
+use shared::errors::{LambdaError, LambdaResult, ToLambdaError};
 use shared::repository::user_repository::{UserRepository, UserRepositoryImpl};
 use shared::utils::{env::get_env, password::generate_password};
 
-use anyhow::{anyhow, Error as AnyhowError};
 use aws_lambda_events::event::apigw::{ApiGatewayProxyRequest, ApiGatewayProxyResponse};
 use lambda_runtime::{service_fn, Error, LambdaEvent};
 use std::collections::HashSet;
 use tracing::{debug, error, info, instrument};
 
-#[instrument(name = "lambda.users.create.initialize_user_repository")]
-async fn initialize_user_repository(
-    region_string: String,
-) -> Result<UserRepositoryImpl, AnyhowError> {
-    let client = DynamoDbClient::new(region_string.clone()).await?;
-    let table_name = get_env("TABLE_NAME", "Users");
-    Ok(UserRepositoryImpl::new(client, table_name))
-}
+/// Check create permission with caching
+async fn check_create_permission_with_cache(user: &User, user_id: &str) -> LambdaResult<()> {
+    let cache_manager = get_cache_manager();
 
-#[instrument(name = "lambda.users.create.initialize_cognito_client")]
-async fn initialize_cognito_client(region_string: String) -> Result<CognitoClient, AnyhowError> {
-    let secrets = Secrets::get_secrets(region_string.clone()).await?;
-    let client = CognitoClient::new(
-        region_string,
-        secrets.user_pool_id,
-        secrets.client_id,
-        secrets.client_secret,
-    )
-    .await?;
-    Ok(client)
-}
+    // Check cache first
+    if let Some(has_permission) = cache_manager.get_permission(user_id).await {
+        debug!("Permission cache hit for user: {}", user_id);
+        return if has_permission {
+            Ok(())
+        } else {
+            Err(LambdaError::InsufficientPermissions)
+        };
+    }
 
-#[instrument(name = "lambda.users.create.check_create_permission")]
-fn check_create_permission(user: &User) -> Result<(), AnyhowError> {
-    if user.has_permission(Permissions::CREATE) {
+    // Check permission on cache miss
+    let has_permission = user.has_permission(Permissions::CREATE);
+    cache_manager
+        .set_permission(user_id.to_string(), has_permission)
+        .await;
+
+    if has_permission {
         Ok(())
     } else {
-        Err(anyhow!("User does not have CREATE permission"))
+        Err(LambdaError::InsufficientPermissions)
     }
 }
 
-#[instrument(name = "lambda.users.create.parse_create_user_request")]
-fn parse_create_user_request(body: Option<&str>) -> Result<CreateUserRequest, AnyhowError> {
-    let body_str = body.ok_or_else(|| anyhow!("Missing request body"))?;
-    let request: CreateUserRequest = serde_json::from_str(body_str)
-        .map_err(|e| anyhow!("Failed to parse CreateUserRequest: {}", e))?;
-    Ok(request)
-}
-
-#[instrument(name = "lambda.users.create.generate_new_user")]
-fn generate_new_user(id: String, request: CreateUserRequest) -> Result<User, AnyhowError> {
+/// Generate new user
+fn generate_new_user(id: String, request: CreateUserRequest) -> LambdaResult<User> {
     let roles = HashSet::new();
     let mut user = User::new(
         id,
@@ -71,11 +57,11 @@ fn generate_new_user(id: String, request: CreateUserRequest) -> Result<User, Any
     Ok(user)
 }
 
-#[instrument(name = "lambda.users.create.build_create_user_response")]
+/// Build create user response
 fn build_create_user_response(
     user: &User,
     tmp_password: String,
-) -> Result<CreateUserResponse, AnyhowError> {
+) -> LambdaResult<CreateUserResponse> {
     let roles = user.roles.iter().cloned().collect::<Vec<Role>>();
     Ok(CreateUserResponse {
         user_name: user.name.clone(),
@@ -85,50 +71,110 @@ fn build_create_user_response(
     })
 }
 
+/// Create standardized error response
+fn create_error_response(error: LambdaError) -> Result<ApiGatewayProxyResponse, Error> {
+    let error_response = serde_json::json!({
+        "error": error.to_string(),
+        "message": error.user_message()
+    });
+
+    Ok(apigw_response(
+        error.status_code(),
+        Some(serde_json::to_string(&error_response)?.into()),
+        None,
+    ))
+}
+
 #[instrument(name = "lambda.users.create.create_user_handler")]
 async fn create_user_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
+    let client_manager = DefaultClientManager::new("ap-northeast-1".to_string());
+
     let (user_id, _) =
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
 
-    let region_string = get_env("REGION", "ap-northeast-1");
-    let client = initialize_cognito_client(region_string.clone()).await?;
-    let repository = initialize_user_repository(region_string).await?;
+    // Zero-copy deserialization and validation
+    let body = event
+        .payload
+        .body
+        .as_deref()
+        .ok_or_else(|| Error::from(LambdaError::MissingBody))?;
 
-    let create_user_request = parse_create_user_request(event.payload.body.as_deref())?;
-    let user = repository.get_user_by_id(user_id.clone()).await?;
-    match check_create_permission(&user) {
-        Ok(_) => {
-            let tmp_password = generate_password()?;
-            debug!("Password has been generated: {:?}", tmp_password);
+    let create_request: CreateUserRequest =
+        serde_json::from_slice(body.as_bytes()).map_err(|e| Error::from(e.to_lambda_error()))?;
 
-            let admin_create_user_opt = client.admin_create_user(user.email.clone()).await?;
+    // Validation
+    if let Err(e) = create_request.validate() {
+        return create_error_response(e);
+    }
+
+    // Get clients using abstraction with explicit trait disambiguation
+    let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
+        .await
+        .map_err(|e| Error::from(e))?;
+    let cognito_client = CognitoClientManager::get_client(&client_manager)
+        .await
+        .map_err(|e| Error::from(e))?;
+
+    let table_name = get_env("TABLE_NAME", "Users");
+    let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
+
+    // Permission check
+    let user = repository
+        .get_user_by_id(user_id.clone())
+        .await
+        .map_err(|e| Error::from(LambdaError::UserRetrievalFailed(e.to_string())))?;
+
+    if let Err(e) = check_create_permission_with_cache(&user, &user_id).await {
+        return create_error_response(e);
+    }
+
+    let tmp_password =
+        generate_password().map_err(|e| Error::from(LambdaError::InternalError(e.to_string())))?;
+    debug!("Password has been generated");
+
+    // Try to create user in Cognito
+    match cognito_client
+        .admin_create_user(create_request.email.clone())
+        .await
+    {
+        Ok(admin_create_user_opt) => {
             debug!("admin create user output: {:?}", admin_create_user_opt);
 
-            let opt = client
-                .admin_set_user_password(&user.email.clone(), &tmp_password, true)
-                .await?;
+            let opt = cognito_client
+                .admin_set_user_password(&create_request.email.clone(), &tmp_password, true)
+                .await
+                .map_err(|e| Error::from(LambdaError::InternalError(e.to_string())))?;
             debug!("admin set user password output: {:?}", opt);
 
-            let opt = client.email_verified(user.email.clone()).await?;
+            let opt = cognito_client
+                .email_verified(create_request.email.clone(), create_request.email.clone())
+                .await
+                .map_err(|e| Error::from(LambdaError::InternalError(e.to_string())))?;
             debug!("email verified user output: {:?}", opt);
 
             let sub = admin_create_user_opt
                 .user()
-                .ok_or("user is None")?
+                .ok_or_else(|| Error::from(LambdaError::InternalError("user is None".to_string())))?
                 .attributes()
                 .iter()
                 .find(|attr| attr.name() == "sub")
-                .ok_or("sub is None")?
+                .ok_or_else(|| Error::from(LambdaError::InternalError("sub is None".to_string())))?
                 .value()
-                .ok_or("sub value is None")?;
-            let tmp_password = generate_password()?;
-            debug!("Generated new password for user {}", user.name);
+                .ok_or_else(|| {
+                    Error::from(LambdaError::InternalError("sub value is None".to_string()))
+                })?;
 
-            let new_user = generate_new_user(sub.to_string(), create_user_request)?;
-            let created_user = repository.create_user(new_user).await?;
-            let response = build_create_user_response(&created_user, tmp_password)?;
+            let new_user =
+                generate_new_user(sub.to_string(), create_request).map_err(|e| Error::from(e))?;
+            let created_user = repository
+                .create_user(new_user)
+                .await
+                .map_err(|e| Error::from(LambdaError::UserCreationFailed(e.to_string())))?;
+            let response = build_create_user_response(&created_user, tmp_password)
+                .map_err(|e| Error::from(e))?;
+
             Ok(apigw_response(
                 200,
                 Some(serde_json::to_string(&response)?.into()),
@@ -136,9 +182,13 @@ async fn create_user_handler(
             ))
         }
         Err(e) => {
-            let err_msg = format!("user does not have permission: {:?}", e);
-            error!(err_msg);
-            Ok(apigw_response(403, Some(err_msg.into()), None))
+            let error = if e.to_string().contains("UsernameExistsException") {
+                LambdaError::UserAlreadyExists
+            } else {
+                error!("Failed to create user in Cognito: {:?}", e);
+                LambdaError::UserCreationFailed(e.to_string())
+            };
+            create_error_response(error)
         }
     }
 }
@@ -155,6 +205,10 @@ async fn handler(
     )
     .await
 }
+
+// Custom allocator configuration
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

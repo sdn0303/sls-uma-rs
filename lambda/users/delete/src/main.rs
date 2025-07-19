@@ -2,84 +2,109 @@ mod requests;
 
 use crate::requests::DeleteUserResponse;
 
-use shared::aws::cognito::client::CognitoClient;
-use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
-use shared::entity::secrets::Secrets;
+use shared::cache_manager::get_cache_manager;
+use shared::client_manager::{CognitoClientManager, DefaultClientManager, DynamoDbClientManager};
 use shared::entity::user::{Permissions, User};
+use shared::errors::{LambdaError, LambdaResult};
 use shared::repository::user_repository::{UserRepository, UserRepositoryImpl};
 use shared::utils::env::get_env;
 
-use anyhow::{anyhow, Error as AnyhowError};
 use aws_lambda_events::event::apigw::{ApiGatewayProxyRequest, ApiGatewayProxyResponse};
 use lambda_runtime::{service_fn, Error, LambdaEvent};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
-#[instrument(name = "lambda.users.delete.initialize_user_repository")]
-async fn initialize_user_repository(
-    region_string: String,
-) -> Result<UserRepositoryImpl, AnyhowError> {
-    let client = DynamoDbClient::new(region_string.clone()).await?;
-    let table_name = get_env("TABLE_NAME", "Users");
-    Ok(UserRepositoryImpl::new(client, table_name))
-}
+/// Check delete permission with caching
+async fn check_delete_permission_with_cache(user: &User, user_id: &str) -> LambdaResult<()> {
+    let cache_manager = get_cache_manager();
 
-#[instrument(name = "lambda.users.delete.initialize_cognito_client")]
-async fn initialize_cognito_client(region_string: String) -> Result<CognitoClient, AnyhowError> {
-    let secrets = Secrets::get_secrets(region_string.clone()).await?;
-    let client = CognitoClient::new(
-        region_string,
-        secrets.user_pool_id,
-        secrets.client_id,
-        secrets.client_secret,
-    )
-    .await?;
-    Ok(client)
-}
+    // Check cache first
+    if let Some(has_permission) = cache_manager.get_permission(user_id).await {
+        debug!("Permission cache hit for user: {}", user_id);
+        return if has_permission {
+            Ok(())
+        } else {
+            Err(LambdaError::InsufficientPermissions)
+        };
+    }
 
-#[instrument(name = "lambda.users.delete.check_delete_permission")]
-fn check_delete_permission(user: &User) -> Result<(), AnyhowError> {
-    if user.has_permission(Permissions::DELETE) {
+    // Check permission on cache miss
+    let has_permission = user.has_permission(Permissions::DELETE);
+    cache_manager
+        .set_permission(user_id.to_string(), has_permission)
+        .await;
+
+    if has_permission {
         Ok(())
     } else {
-        Err(anyhow!("User does not have DELETE permission"))
+        Err(LambdaError::InsufficientPermissions)
     }
 }
 
-#[instrument(name = "lambda.users.get.delete_user_handler")]
+/// Create standardized error response
+fn create_error_response(error: LambdaError) -> Result<ApiGatewayProxyResponse, Error> {
+    let error_response = serde_json::json!({
+        "error": error.to_string(),
+        "message": error.user_message()
+    });
+
+    Ok(apigw_response(
+        error.status_code(),
+        Some(serde_json::to_string(&error_response)?.into()),
+        None,
+    ))
+}
+
+#[instrument(name = "lambda.users.delete.delete_user_handler")]
 async fn delete_user_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
+    let client_manager = DefaultClientManager::new("ap-northeast-1".to_string());
+
     let (user_id, organization_id) =
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
 
-    let region_string = get_env("REGION", "ap-northeast-1");
-    let client = initialize_cognito_client(region_string.clone()).await?;
-    let repository = initialize_user_repository(region_string).await?;
+    // Get clients using abstraction with explicit trait disambiguation
+    let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
+        .await
+        .map_err(|e| Error::from(e))?;
+    let cognito_client = CognitoClientManager::get_client(&client_manager)
+        .await
+        .map_err(|e| Error::from(e))?;
 
-    let user = repository.get_user_by_id(user_id.clone()).await?;
-    match check_delete_permission(&user) {
-        Ok(_) => {
-            client.admin_delete_user(user_id.clone()).await?;
-            repository
-                .delete_user_by_id(user_id.clone(), organization_id)
-                .await?;
+    let table_name = get_env("TABLE_NAME", "Users");
+    let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
 
-            let response = DeleteUserResponse {
-                message: format!("User {} has been deleted.", user_id),
-            };
-            Ok(apigw_response(
-                200,
-                Some(serde_json::to_string(&response)?.into()),
-                None,
-            ))
-        }
-        Err(e) => {
-            let err_msg = format!("user does not have permission: {:?}", e);
-            error!(err_msg);
-            Ok(apigw_response(403, Some(err_msg.into()), None))
-        }
+    // Permission check
+    let user = repository
+        .get_user_by_id(user_id.clone())
+        .await
+        .map_err(|e| Error::from(LambdaError::UserRetrievalFailed(e.to_string())))?;
+
+    if let Err(e) = check_delete_permission_with_cache(&user, &user_id).await {
+        return create_error_response(e);
     }
+
+    // Delete user from Cognito
+    cognito_client
+        .admin_delete_user(user_id.clone())
+        .await
+        .map_err(|e| Error::from(LambdaError::UserDeletionFailed(e.to_string())))?;
+
+    // Delete user from DynamoDB
+    repository
+        .delete_user_by_id(user_id.clone(), organization_id.clone())
+        .await
+        .map_err(|e| Error::from(LambdaError::UserDeletionFailed(e.to_string())))?;
+
+    let response = DeleteUserResponse {
+        message: format!("User {} has been deleted.", user_id),
+    };
+    Ok(apigw_response(
+        200,
+        Some(serde_json::to_string(&response)?.into()),
+        None,
+    ))
 }
 
 #[instrument(name = "lambda.users.delete.handler")]
@@ -94,6 +119,10 @@ async fn handler(
     )
     .await
 }
+
+// Custom allocator configuration
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

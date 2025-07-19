@@ -2,81 +2,137 @@ mod requests;
 
 use crate::requests::{UpdateUserRequest, UpdateUserResponse};
 
-use shared::aws::dynamodb::client::DynamoDbClient;
 use shared::aws::lambda_events::{request::LambdaEventRequestHandler, response::apigw_response};
+use shared::cache_manager::get_cache_manager;
+use shared::client_manager::{DefaultClientManager, DynamoDbClientManager};
+use shared::entity::user::{Permissions, User};
+use shared::errors::{LambdaError, LambdaResult, ToLambdaError};
 use shared::repository::user_repository::{UserRepository, UserRepositoryImpl};
 use shared::utils::env::get_env;
 
-use anyhow::{anyhow, Error as AnyhowError};
 use aws_lambda_events::event::apigw::{ApiGatewayProxyRequest, ApiGatewayProxyResponse};
 use lambda_runtime::{service_fn, Error, LambdaEvent};
-use shared::entity::user::{Permissions, User};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
-#[instrument(name = "lambda.users.update.initialize_user_repository")]
-async fn initialize_user_repository(
-    region_string: String,
-) -> Result<UserRepositoryImpl, AnyhowError> {
-    let client = DynamoDbClient::new(region_string.clone()).await?;
-    let table_name = get_env("TABLE_NAME", "Users");
-    Ok(UserRepositoryImpl::new(client, table_name))
-}
+/// Check update permission with caching
+async fn check_update_permission_with_cache(user: &User, user_id: &str) -> LambdaResult<()> {
+    let cache_manager = get_cache_manager();
 
-#[instrument(name = "lambda.users.update.check_update_permission")]
-fn check_update_permission(user: &User) -> Result<(), AnyhowError> {
-    if user.has_permission(Permissions::UPDATE) {
+    // Check cache first
+    if let Some(has_permission) = cache_manager.get_permission(user_id).await {
+        debug!("Permission cache hit for user: {}", user_id);
+        return if has_permission {
+            Ok(())
+        } else {
+            Err(LambdaError::InsufficientPermissions)
+        };
+    }
+
+    // Check permission on cache miss
+    let has_permission = user.has_permission(Permissions::UPDATE);
+    cache_manager
+        .set_permission(user_id.to_string(), has_permission)
+        .await;
+
+    if has_permission {
         Ok(())
     } else {
-        Err(anyhow!("User does not have UPDATE permission"))
+        Err(LambdaError::InsufficientPermissions)
     }
 }
 
-#[instrument(name = "lambda.users.update.parse_update_user_request")]
-fn parse_update_user_request(body: Option<&str>) -> Result<UpdateUserRequest, AnyhowError> {
-    let body_str = body.ok_or_else(|| anyhow!("Missing request body"))?;
-    let request: UpdateUserRequest = serde_json::from_str(body_str)
-        .map_err(|e| anyhow!("Failed to parse UpdateUserRequest: {}", e))?;
-    Ok(request)
+/// Create standardized error response
+fn create_error_response(error: LambdaError) -> Result<ApiGatewayProxyResponse, Error> {
+    let error_response = serde_json::json!({
+        "error": error.to_string(),
+        "message": error.user_message()
+    });
+
+    Ok(apigw_response(
+        error.status_code(),
+        Some(serde_json::to_string(&error_response)?.into()),
+        None,
+    ))
 }
 
 #[instrument(name = "lambda.users.update.update_user_handler")]
 async fn update_user_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
+    let client_manager = DefaultClientManager::new("ap-northeast-1".to_string());
+    let cache_manager = get_cache_manager();
+
     let (user_id, _) =
         LambdaEventRequestHandler::get_ids_from_request_context(event.clone()).await?;
 
-    let update_user_request = parse_update_user_request(event.payload.body.as_deref())?;
-    let region_string = get_env("REGION", "ap-northeast-1");
-    let repository = initialize_user_repository(region_string).await?;
+    // Zero-copy deserialization and validation
+    let body = event
+        .payload
+        .body
+        .as_deref()
+        .ok_or_else(|| Error::from(LambdaError::MissingBody))?;
 
-    let mut user = repository.get_user_by_id(user_id.clone()).await?;
-    match check_update_permission(&user) {
-        Ok(_) => {
-            user.name = update_user_request.user_name.clone();
-            user.organization_name = update_user_request.organization_name.clone();
+    let update_user_request: UpdateUserRequest =
+        serde_json::from_slice(body.as_bytes()).map_err(|e| Error::from(e.to_lambda_error()))?;
 
-            let new_roles = update_user_request.roles.clone();
-            if !new_roles.is_empty() {
-                user.set_from_roles(new_roles);
-            }
-
-            let _ = repository.update_user(user).await?;
-            let response = UpdateUserResponse {
-                message: format!("User {} has been updated.", user_id),
-            };
-            Ok(apigw_response(
-                200,
-                Some(serde_json::to_string(&response)?.into()),
-                None,
-            ))
-        }
-        Err(e) => {
-            let err_msg = format!("user does not have permission: {:?}", e);
-            error!(err_msg);
-            Ok(apigw_response(403, Some(err_msg.into()), None))
-        }
+    // Validation
+    if let Err(e) = update_user_request.validate() {
+        return create_error_response(e);
     }
+
+    let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
+        .await
+        .map_err(|e| Error::from(e))?;
+    let table_name = get_env("TABLE_NAME", "Users");
+    let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
+
+    // Get user info from cache
+    let user = if let Some(cached_user) = cache_manager.get_user(&user_id).await {
+        debug!("User info cache hit for user: {}", user_id);
+        cached_user
+    } else {
+        let user = repository
+            .get_user_by_id(user_id.clone())
+            .await
+            .map_err(|e| Error::from(LambdaError::UserRetrievalFailed(e.to_string())))?;
+        cache_manager.set_user(user_id.clone(), user.clone()).await;
+        user
+    };
+
+    // Permission check
+    if let Err(e) = check_update_permission_with_cache(&user, &user_id).await {
+        return create_error_response(e);
+    }
+
+    // Update user information
+    let mut updated_user = user.clone();
+    updated_user.name = update_user_request.user_name.clone();
+    updated_user.organization_name = update_user_request.organization_name.clone();
+
+    let new_roles = update_user_request.roles.clone();
+    if !new_roles.is_empty() {
+        updated_user.set_from_roles(new_roles);
+    }
+
+    // Update DynamoDB
+    let updated_user = repository
+        .update_user(updated_user)
+        .await
+        .map_err(|e| Error::from(LambdaError::UserUpdateFailed(e.to_string())))?;
+
+    // Update cache
+    cache_manager
+        .set_user(user_id.clone(), updated_user.clone())
+        .await;
+
+    let response = UpdateUserResponse {
+        message: format!("User {} has been updated.", user_id),
+    };
+    Ok(apigw_response(
+        200,
+        Some(serde_json::to_string(&response)?.into()),
+        None,
+    ))
 }
 
 #[instrument(name = "lambda.users.update.handler")]
@@ -91,6 +147,10 @@ async fn handler(
     )
     .await
 }
+
+// Custom allocator configuration
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
