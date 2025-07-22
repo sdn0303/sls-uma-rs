@@ -112,10 +112,10 @@ async fn create_user_handler(
     // Get clients using abstraction with explicit trait disambiguation
     let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
     let cognito_client = CognitoClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     let table_name = get_env("TABLE_NAME", "Users");
     let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
@@ -167,13 +167,13 @@ async fn create_user_handler(
                 })?;
 
             let new_user =
-                generate_new_user(sub.to_string(), create_request).map_err(|e| Error::from(e))?;
+                generate_new_user(sub.to_string(), create_request).map_err(Error::from)?;
             let created_user = repository
                 .create_user(new_user)
                 .await
                 .map_err(|e| Error::from(LambdaError::UserCreationFailed(e.to_string())))?;
-            let response = build_create_user_response(&created_user, tmp_password)
-                .map_err(|e| Error::from(e))?;
+            let response =
+                build_create_user_response(&created_user, tmp_password).map_err(Error::from)?;
 
             Ok(apigw_response(
                 200,

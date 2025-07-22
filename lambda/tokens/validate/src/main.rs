@@ -52,7 +52,7 @@ fn create_error_response(error: LambdaError) -> Result<ApiGatewayProxyResponse, 
     });
 
     Ok(apigw_response(
-        error.status_code() as i64,
+        error.status_code(),
         Some(serde_json::to_string(&error_response)?.into()),
         None,
     ))
@@ -80,10 +80,7 @@ async fn token_validate_handler(
     }
 
     // Get token authorizer using abstraction
-    let authorizer = client_manager
-        .get_authorizer()
-        .await
-        .map_err(|e| Error::from(e))?;
+    let authorizer = client_manager.get_authorizer().await.map_err(Error::from)?;
 
     let claims = match authorizer.validate_token(&validate_request.token).await {
         Ok(claims) => claims,
@@ -103,7 +100,7 @@ async fn token_validate_handler(
     // Get user info with caching
     let user = get_user_with_cache(&claims.sub, &client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     let response = TokenValidateResponse {
         user_id: user.id.clone(),

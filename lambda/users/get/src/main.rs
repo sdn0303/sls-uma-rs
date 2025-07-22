@@ -44,7 +44,7 @@ async fn get_user_handler(
     } else {
         let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
             .await
-            .map_err(|e| Error::from(e))?;
+            .map_err(Error::from)?;
         let table_name = get_env("TABLE_NAME", "Users");
         let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
 
@@ -83,7 +83,7 @@ async fn get_users_handler(
     } else {
         let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
             .await
-            .map_err(|e| Error::from(e))?;
+            .map_err(Error::from)?;
         let table_name = get_env("TABLE_NAME", "Users");
         let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
 

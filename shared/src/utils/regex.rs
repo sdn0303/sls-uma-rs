@@ -15,7 +15,7 @@ pub static USERNAME_REGEX: Lazy<Regex> =
 // Additional validation for name length (1-50 characters)
 fn is_valid_username_length(name: &str) -> bool {
     let len = name.chars().count();
-    len >= 1 && len <= 50 && !name.trim().is_empty()
+    (1..=50).contains(&len) && !name.trim().is_empty()
 }
 
 // Additional validation to ensure proper name formatting
@@ -50,7 +50,7 @@ fn is_well_formatted_username(name: &str) -> bool {
 
     // For any names with punctuation, check each part doesn't start/end inappropriately
     for part in &parts {
-        if part.starts_with(&['-', '\'', '.']) || part.ends_with(&['-', '\'']) {
+        if part.starts_with(['-', '\'', '.']) || part.ends_with(['-', '\'']) {
             return false;
         }
     }

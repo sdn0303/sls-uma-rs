@@ -36,7 +36,7 @@ impl SignupRequest {
         // Password strength check (must contain uppercase, lowercase, and numbers)
         let has_uppercase = self.password.chars().any(|c| c.is_uppercase());
         let has_lowercase = self.password.chars().any(|c| c.is_lowercase());
-        let has_digit = self.password.chars().any(|c| c.is_digit(10));
+        let has_digit = self.password.chars().any(|c| c.is_ascii_digit());
 
         if !has_uppercase || !has_lowercase || !has_digit {
             return Err(LambdaError::InvalidPassword);

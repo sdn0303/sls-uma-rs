@@ -103,16 +103,16 @@ async fn login_handler(
     // Get clients using abstraction with explicit trait disambiguation
     let cognito_client = CognitoClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
     let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     // Use email as username for Cognito authentication
     let username = login_request.email.clone();
     let hash = calculate_hash_with_cache(&cognito_client, &username)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     // Setup user repository
     let table_name = get_env("TABLE_NAME", "Users");

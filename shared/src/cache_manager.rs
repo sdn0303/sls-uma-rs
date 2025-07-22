@@ -117,6 +117,12 @@ impl CacheManager {
     }
 }
 
+impl Default for CacheManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Cache statistics
 #[derive(Debug, Clone)]
 pub struct CacheStats {

@@ -67,10 +67,10 @@ async fn delete_user_handler(
     // Get clients using abstraction with explicit trait disambiguation
     let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
     let cognito_client = CognitoClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     let table_name = get_env("TABLE_NAME", "Users");
     let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);

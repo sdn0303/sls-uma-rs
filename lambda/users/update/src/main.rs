@@ -82,7 +82,7 @@ async fn update_user_handler(
 
     let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
     let table_name = get_env("TABLE_NAME", "Users");
     let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
 

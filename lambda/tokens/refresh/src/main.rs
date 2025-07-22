@@ -44,7 +44,7 @@ fn create_error_response(error: LambdaError) -> Result<ApiGatewayProxyResponse, 
     });
 
     Ok(apigw_response(
-        error.status_code() as i64,
+        error.status_code(),
         Some(serde_json::to_string(&error_response)?.into()),
         None,
     ))
@@ -75,14 +75,11 @@ async fn refresh_token_handler(
     }
 
     // Get client using abstraction
-    let client = client_manager
-        .get_client()
-        .await
-        .map_err(|e| Error::from(e))?;
+    let client = client_manager.get_client().await.map_err(Error::from)?;
 
     let hash = calculate_hash_with_cache(&client, &user_id)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     match client
         .refresh_token(refresh_request.refresh_token, hash)

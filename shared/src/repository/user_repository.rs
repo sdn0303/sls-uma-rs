@@ -220,23 +220,19 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<Option<String>, AnyhowError> {
         let response = self.client.scan_table(&self.table_name).await?;
 
-        let organization_id = response
-            .items
-            .as_ref()
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(|item| {
-                        item.get("organization_name")
-                            .and_then(|attr| attr.as_s().ok())
-                            .filter(|&org_name| org_name == organization_name)
-                            .and_then(|_| item.get("organization_id"))
-                            .and_then(|attr| attr.as_s().ok())
-                            .map(|s| s.to_string())
-                    })
-                    .next()
-            })
-            .flatten();
+        let organization_id = response.items.as_ref().and_then(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    item.get("organization_name")
+                        .and_then(|attr| attr.as_s().ok())
+                        .filter(|&org_name| org_name == organization_name)
+                        .and_then(|_| item.get("organization_id"))
+                        .and_then(|attr| attr.as_s().ok())
+                        .map(|s| s.to_string())
+                })
+                .next()
+        });
 
         Ok(organization_id)
     }
@@ -251,7 +247,7 @@ impl UserRepository for UserRepositoryImpl {
                 items.iter().any(|item| {
                     item.get("organization_name")
                         .and_then(|attr| attr.as_s().ok())
-                        .map_or(false, |org_name| org_name == organization_name)
+                        .is_some_and(|org_name| org_name == organization_name)
                 })
             })
             .unwrap_or(false);
@@ -272,7 +268,7 @@ impl UserRepository for UserRepositoryImpl {
                 items.iter().any(|item| {
                     item.get("organization_name")
                         .and_then(|attr| attr.as_s().ok())
-                        .map_or(false, |org_name| org_name == organization_name)
+                        .is_some_and(|org_name| org_name == organization_name)
                 })
             })
             .unwrap_or(false);

@@ -91,10 +91,10 @@ async fn signup_handler(
     // Get clients using abstraction with explicit trait disambiguation
     let cognito_client = CognitoClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
     let dynamodb_client = DynamoDbClientManager::get_client(&client_manager)
         .await
-        .map_err(|e| Error::from(e))?;
+        .map_err(Error::from)?;
 
     let table_name = get_env("TABLE_NAME", "Users");
     let repository = UserRepositoryImpl::new((*dynamodb_client).clone(), table_name);
@@ -137,7 +137,7 @@ async fn signup_handler(
 
             let new_user = generate_new_user(sub.to_string(), signup_request, &repository)
                 .await
-                .map_err(|e| Error::from(e))?;
+                .map_err(Error::from)?;
 
             repository
                 .create_user(new_user)
