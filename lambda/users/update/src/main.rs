@@ -126,7 +126,7 @@ async fn update_user_handler(
         .await;
 
     let response = UpdateUserResponse {
-        message: format!("User {} has been updated.", user_id),
+        message: format!("User {user_id} has been updated."),
     };
     Ok(apigw_response(
         200,

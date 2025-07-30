@@ -98,7 +98,7 @@ async fn delete_user_handler(
         .map_err(|e| Error::from(LambdaError::UserDeletionFailed(e.to_string())))?;
 
     let response = DeleteUserResponse {
-        message: format!("User {} has been deleted.", user_id),
+        message: format!("User {user_id} has been deleted."),
     };
     Ok(apigw_response(
         200,
