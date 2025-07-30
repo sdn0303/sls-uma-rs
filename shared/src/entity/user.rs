@@ -67,7 +67,7 @@ impl std::fmt::Display for Role {
             Role::Reader => "Reader",
             Role::Writer => "Writer",
         };
-        write!(f, "{}", role_str)
+        write!(f, "{role_str}")
     }
 }
 

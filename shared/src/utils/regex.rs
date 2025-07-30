@@ -93,8 +93,7 @@ mod tests {
         for email in &valid_emails {
             assert!(
                 EMAIL_REGEX.is_match(email),
-                "Email '{}' should be valid",
-                email
+                "Email '{email}' should be valid"
             );
         }
     }
@@ -127,8 +126,7 @@ mod tests {
         for email in &invalid_emails {
             assert!(
                 !EMAIL_REGEX.is_match(email),
-                "Email '{}' should be invalid",
-                email
+                "Email '{email}' should be invalid"
             );
         }
     }
@@ -165,8 +163,7 @@ mod tests {
         for name in &valid_english_names {
             assert!(
                 is_valid_username(name),
-                "English name '{}' should be valid",
-                name
+                "English name '{name}' should be valid"
             );
         }
     }
@@ -205,8 +202,7 @@ mod tests {
         for name in &valid_japanese_names {
             assert!(
                 is_valid_username(name),
-                "Japanese name '{}' should be valid",
-                name
+                "Japanese name '{name}' should be valid"
             );
         }
     }
@@ -250,11 +246,7 @@ mod tests {
         ];
 
         for name in &invalid_names {
-            assert!(
-                !is_valid_username(name),
-                "Name '{}' should be invalid",
-                name
-            );
+            assert!(!is_valid_username(name), "Name '{name}' should be invalid");
         }
     }
 
@@ -309,8 +301,7 @@ mod tests {
         for name in &valid_mixed_names {
             assert!(
                 is_valid_username(name),
-                "Mixed language name '{}' should be valid",
-                name
+                "Mixed language name '{name}' should be valid"
             );
         }
     }
@@ -333,7 +324,7 @@ mod tests {
         ];
 
         for name in &valid_cases {
-            assert!(is_valid_username(name), "Name '{}' should be valid", name);
+            assert!(is_valid_username(name), "Name '{name}' should be valid");
         }
 
         // Invalid edge cases
@@ -349,11 +340,7 @@ mod tests {
         ];
 
         for name in &invalid_cases {
-            assert!(
-                !is_valid_username(name),
-                "Name '{}' should be invalid",
-                name
-            );
+            assert!(!is_valid_username(name), "Name '{name}' should be invalid");
         }
     }
 
@@ -383,8 +370,7 @@ mod tests {
         for email in &valid_edge_cases {
             assert!(
                 EMAIL_REGEX.is_match(email),
-                "Email '{}' should be valid",
-                email
+                "Email '{email}' should be valid"
             );
         }
 
@@ -402,8 +388,7 @@ mod tests {
         for email in &invalid_edge_cases {
             assert!(
                 !EMAIL_REGEX.is_match(email),
-                "Email '{}' should be invalid",
-                email
+                "Email '{email}' should be invalid"
             );
         }
     }
@@ -422,8 +407,7 @@ mod tests {
             assert_eq!(
                 EMAIL_REGEX.is_match(email),
                 *should_match,
-                "Email '{}' case sensitivity test failed",
-                email
+                "Email '{email}' case sensitivity test failed"
             );
         }
     }

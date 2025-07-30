@@ -52,14 +52,13 @@ impl SecretManagerClient {
     ) -> Result<(String, String), SecretManagerError> {
         let _permit = semaphore.acquire().await.map_err(|e| {
             SecretManagerError::SemaphoreError(format!(
-                "Failed to acquire semaphore for key {}: {}",
-                key, e
+                "Failed to acquire semaphore for key {key}: {e}",
             ))
         })?;
 
         let secret_response = self.get_secret(key).await?;
         let secret = secret_response.secret_string.ok_or_else(|| {
-            SecretManagerError::MissingAttribute(format!("Missing secret string for key: {}", key))
+            SecretManagerError::MissingAttribute(format!("Missing secret string for key: {key}"))
         })?;
 
         Ok((key.to_string(), secret))

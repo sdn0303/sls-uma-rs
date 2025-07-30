@@ -149,13 +149,13 @@ pub trait ToLambdaError {
 
 impl ToLambdaError for serde_json::Error {
     fn to_lambda_error(self) -> LambdaError {
-        LambdaError::InternalError(format!("JSON parsing error: {}", self))
+        LambdaError::InternalError(format!("JSON parsing error: {self}"))
     }
 }
 
 impl ToLambdaError for std::io::Error {
     fn to_lambda_error(self) -> LambdaError {
-        LambdaError::InternalError(format!("IO error: {}", self))
+        LambdaError::InternalError(format!("IO error: {self}"))
     }
 }
 
